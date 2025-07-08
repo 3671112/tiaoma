@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>条形码识别器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 700;
+        }
+
+        .scanner-container {
+            position: relative;
+            margin: 20px 0;
+            border-radius: 15px;
+            overflow: hidden;
+            background: #000;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        #scanner {
+            width: 100%;
+            height: 300px;
+            display: none;
+        }
+
+        #scanner video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #scanner canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .scan-line {
+            position: absolute;
+            top: 50%;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: #00ff00;
+            box-shadow: 0 0 10px #00ff00;
+            animation: scanAnimation 2s ease-in-out infinite;
+            z-index: 10;
+        }
+
+        @keyframes scanAnimation {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 15px;
+            border-left: 5px solid #667eea;
+        }
+
+        .result-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .barcode-value {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .barcode-format {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .feature {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+        }
+
+        .feature h3 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .feature p {
+            color: #666;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            #scanner {
+                height: 250px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 条形码识别器</h1>
+        
+        <div class="features">
+            <div class="feature">
+                <h3>🎯 高精度识别</h3>
+                <p>支持EAN-13、Code128、Code39等多种条形码格式</p>
+            </div>
+            <div class="feature">
+                <h3>⚡ 实时扫描</h3>
+                <p>毫秒级响应，即扫即得结果</p>
+            </div>
+            <div class="feature">
+                <h3>🔒 隐私安全</h3>
+                <p>纯前端处理，数据不上传服务器</p>
+            </div>
+        </div>
+
+        <div id="status" class="status info">
+            点击"启动摄像头"开始扫描条形码
+        </div>
+
+        <div class="scanner-container">
+            <div id="scanner">
+                <div class="scan-line"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" onclick="startScanner()">启动摄像头</button>
+            <button id="stopBtn" onclick="stopScanner()" disabled>停止扫描</button>
+            <button id="clearBtn" onclick="clearResults()">清空结果</button>
+        </div>
+
+        <div class="result-section">
+            <h3>📋 扫描结果</h3>
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script>
+        let isScanning = false;
+        let scannedResults = [];
+
+        function updateStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        function updateButtons() {
+            document.getElementById('startBtn').disabled = isScanning;
+            document.getElementById('stopBtn').disabled = !isScanning;
+        }
+
+        function playBeepSound() {
+            // 创建Web Audio API音效
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 800;
+            oscillator.type = 'square';
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.2);
+        }
+
+        function addResult(code, format) {
+            // 检查是否已存在相同结果
+            const exists = scannedResults.some(result => result.code === code);
+            if (exists) return;
+
+            const result = {
+                code: code,
+                format: format,
+                timestamp: new Date().toLocaleString('zh-CN')
+            };
+            
+            scannedResults.unshift(result);
+            
+            // 限制结果数量
+            if (scannedResults.length > 10) {
+                scannedResults = scannedResults.slice(0, 10);
+            }
+            
+            updateResultsDisplay();
+            playBeepSound();
+            updateStatus(`✅ 识别成功: ${code}`, 'success');
+        }
+
+        function updateResultsDisplay() {
+            const resultsDiv = document.getElementById('results');
+            
+            if (scannedResults.length === 0) {
+                resultsDiv.innerHTML = '<p style="color: #666; font-style: italic;">暂无扫描结果</p>';
+                return;
+            }
+            
+            resultsDiv.innerHTML = scannedResults.map(result => `
+                <div class="result-item">
+                    <div>
+                        <div class="barcode-value">${result.code}</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">${result.timestamp}</div>
+                    </div>
+                    <div class="barcode-format">${result.format}</div>
+                </div>
+            `).join('');
+        }
+
+        function startScanner() {
+            if (isScanning) return;
+            
+            updateStatus('🎥 正在启动摄像头...', 'info');
+            
+            // 检查浏览器支持
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                updateStatus('❌ 您的浏览器不支持摄像头访问', 'error');
+                return;
+            }
+
+            const scannerDiv = document.getElementById('scanner');
+            scannerDiv.style.display = 'block';
+
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: scannerDiv,
+                    constraints: {
+                        width: 600,
+                        height: 300,
+                        facingMode: "environment" // 优先使用后置摄像头
+                    }
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                numOfWorkers: 2,
+                frequency: 10,
+                decoder: {
+                    readers: [
+                        "code_128_reader",
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_39_reader",
+                        "code_39_vin_reader",
+                        "codabar_reader",
+                        "upc_reader",
+                        "upc_e_reader",
+                        "i2of5_reader"
+                    ]
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error('QuaggaJS初始化失败:', err);
+                    updateStatus('❌ 摄像头启动失败，请检查权限设置', 'error');
+                    scannerDiv.style.display = 'none';
+                    return;
+                }
+                
+                console.log("QuaggaJS初始化成功");
+                Quagga.start();
+                isScanning = true;
+                updateButtons();
+                updateStatus('🔍 摄像头已启动，请将条形码对准扫描区域', 'success');
+            });
+
+            // 监听条形码识别结果
+            Quagga.onDetected(function(data) {
+                const code = data.codeResult.code;
+                const format = data.codeResult.format;
+                
+                console.log('检测到条形码:', code, '格式:', format);
+                addResult(code, format);
+            });
+        }
+
+        function stopScanner() {
+            if (!isScanning) return;
+            
+            Quagga.stop();
+            document.getElementById('scanner').style.display = 'none';
+            isScanning = false;
+            updateButtons();
+            updateStatus('⏹️ 扫描已停止', 'info');
+        }
+
+        function clearResults() {
+            scannedResults = [];
+            updateResultsDisplay();
+            updateStatus('🗑️ 结果已清空', 'info');
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            updateResultsDisplay();
+            updateButtons();
+            
+            // 检查HTTPS环境
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                updateStatus('⚠️ 摄像头功能需要HTTPS环境', 'error');
+            }
+        });
+
+        // 页面卸载时清理资源
+        window.addEventListener('beforeunload', function() {
+            if (isScanning) {
+                stopScanner();
+            }
+        });
+    </script>
+</body>
+</html>
